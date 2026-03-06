@@ -84,9 +84,9 @@
 
             // tf.tidy 會自動清理記憶體，防止手機瀏覽器崩潰
             tf.tidy(() => {
-                // 將影像轉為 320x320 的 Tensor
+                // 將影像轉為 640x640 的 Tensor
                 const tfImg = tf.browser.fromPixels(video)
-                    .resizeBilinear([320, 320])
+                    .resizeBilinear([640, 640])
                     .div(255.0)
                     .expandDims(0);
 
@@ -111,8 +111,8 @@
                         const h = data[3 * numAnchors + i];
 
                         // 轉換回原始螢幕尺寸的座標
-                        const xScale = canvas.width / 320;
-                        const yScale = canvas.height / 320;
+                        const xScale = canvas.width / 640;
+                        const yScale = canvas.height / 640;
                         
                         const x = (cx - w / 2) * xScale;
                         const y = (cy - h / 2) * yScale;
@@ -150,3 +150,4 @@
     </script>
 </body>
 </html>
+
