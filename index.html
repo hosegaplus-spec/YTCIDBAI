@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HoSeGa WebAR 橋梁檢測系統</title>
+    <title>YTCIAIDB_test</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; }
@@ -18,7 +18,7 @@
 <body>
 
     <div id="uiContainer">
-        <h1>🌉 HoSeGa 即時快篩</h1>
+        <h1>🌉 即時快篩</h1>
         <p id="statusText">系統狀態：準備載入模型...</p>
         <p id="fps">FPS: --</p>
     </div>
@@ -59,7 +59,7 @@
             statusText.innerText = "系統狀態：載入 AI 大腦中 (需幾秒鐘)...";
             try {
                 // 這裡會讀取同資料夾下的 model.json
-                model = await tf.loadGraphModel('model.json');
+                model = await tf.loadGraphModel('https://hosegaplus-spec.github.io/YTCIDBAI/model.json');
                 statusText.innerText = "✅ 模型載入完成！開始實時檢測。";
             } catch (error) {
                 statusText.innerText = "❌ 載入失敗！請確認檔案有一起上傳。";
