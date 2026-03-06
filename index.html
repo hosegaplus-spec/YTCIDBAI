@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoSeGa WebAR 橋梁檢測系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; }
+        /* 讓影片和畫布完全重疊，填滿螢幕 */
+        #videoElement { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 1; }
+        #canvasElement { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 2; pointer-events: none; }
+        #uiContainer { position: absolute; top: 20px; left: 20px; z-index: 3; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 1px solid #4CAF50; }
+        h1 { margin: 0 0 10px 0; font-size: 20px; color: #4CAF50; }
+        #fps { font-size: 14px; color: #ffeb3b; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="uiContainer">
+        <h1>🌉 HoSeGa 即時快篩</h1>
+        <p id="statusText">系統狀態：準備載入模型...</p>
+        <p id="fps">FPS: --</p>
+    </div>
+
+    <video id="videoElement" autoplay playsinline muted></video>
+    <canvas id="canvasElement"></canvas>
+
+    <script>
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvasElement');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('statusText');
+        const fpsText = document.getElementById('fps');
+        let model;
+        let lastFrameTime = 0;
+
+        // 1. 啟動後置攝影機
+        async function setupCamera() {
+            statusText.innerText = "系統狀態：正在開啟攝影機...";
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } }
+                });
+                video.srcObject = stream;
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve(video);
+                    };
+                });
+            } catch (error) {
+                statusText.innerText = "❌ 無法取得攝影機權限！";
+            }
+        }
+
+        // 2. 載入 YOLOv8 TFJS 模型
+        async function loadModel() {
+            statusText.innerText = "系統狀態：載入 AI 大腦中 (需幾秒鐘)...";
+            try {
+                // 這裡會讀取同資料夾下的 model.json
+                model = await tf.loadGraphModel('model.json');
+                statusText.innerText = "✅ 模型載入完成！開始實時檢測。";
+            } catch (error) {
+                statusText.innerText = "❌ 載入失敗！請確認檔案有一起上傳。";
+                console.error(error);
+            }
+        }
+
+        // 3. 即時辨識迴圈 (核心引擎)
+        async function detectFrame() {
+            if (!model) return;
+
+            // 計算 FPS
+            const now = performance.now();
+            const fps = Math.round(1000 / (now - lastFrameTime));
+            lastFrameTime = now;
+            fpsText.innerText = `FPS: ${fps}`;
+
+            // 設定畫布尺寸與影片一致
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // tf.tidy 會自動清理記憶體，防止手機瀏覽器崩潰
+            tf.tidy(() => {
+                // 將影像轉為 640x640 的 Tensor
+                const tfImg = tf.browser.fromPixels(video)
+                    .resizeBilinear([640, 640])
+                    .div(255.0)
+                    .expandDims(0);
+
+                // 進行預測
+                const predictions = model.predict(tfImg);
+                
+                // YOLOv8 輸出格式解析 (簡化版：抓取信心度最高的結果)
+                // 注意：這是一個針對 MVP 測試的快速降維方法
+                const data = predictions.dataSync();
+                const numClasses = 1; // 我們只有 defect 一個類別
+                const numAnchors = 8400; // YOLOv8 預設的網格數
+
+                // 尋找高於 25% 信心度的特徵
+                for (let i = 0; i < numAnchors; i++) {
+                    const confidence = data[4 * numAnchors + i]; // 取得信心度分數
+                    
+                    if (confidence > 0.25) {
+                        // 取得邊界框中心點與長寬 (相對於 640x640)
+                        const cx = data[0 * numAnchors + i];
+                        const cy = data[1 * numAnchors + i];
+                        const w = data[2 * numAnchors + i];
+                        const h = data[3 * numAnchors + i];
+
+                        // 轉換回原始螢幕尺寸的座標
+                        const xScale = canvas.width / 640;
+                        const yScale = canvas.height / 640;
+                        
+                        const x = (cx - w / 2) * xScale;
+                        const y = (cy - h / 2) * yScale;
+                        const width = w * xScale;
+                        const height = h * yScale;
+
+                        // 畫出紅框
+                        ctx.strokeStyle = "#FF3B30"; // iOS 紅色
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(x, y, width, height);
+
+                        // 畫出標籤背景與文字
+                        ctx.fillStyle = "#FF3B30";
+                        ctx.fillRect(x, y - 25, 120, 25);
+                        ctx.fillStyle = "white";
+                        ctx.font = "16px Arial";
+                        ctx.fillText(`瑕疵 ${Math.round(confidence * 100)}%`, x + 5, y - 8);
+                    }
+                }
+            });
+
+            // 呼叫下一幀
+            requestAnimationFrame(detectFrame);
+        }
+
+        async function main() {
+            await setupCamera();
+            await loadModel();
+            detectFrame();
+        }
+
+        main();
+    </script>
+</body>
+</html>
