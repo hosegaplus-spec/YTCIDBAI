@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YTCIAIDB_test</title>
+    <title>HoSeGa WebAR 橋梁檢測系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; }
@@ -18,7 +18,7 @@
 <body>
 
     <div id="uiContainer">
-        <h1>🌉 即時快篩</h1>
+        <h1>🌉 HoSeGa 即時快篩</h1>
         <p id="statusText">系統狀態：準備載入模型...</p>
         <p id="fps">FPS: --</p>
     </div>
@@ -84,9 +84,9 @@
 
             // tf.tidy 會自動清理記憶體，防止手機瀏覽器崩潰
             tf.tidy(() => {
-                // 將影像轉為 640x640 的 Tensor
+                // 將影像轉為 320x320 的 Tensor
                 const tfImg = tf.browser.fromPixels(video)
-                    .resizeBilinear([640, 640])
+                    .resizeBilinear([320, 320])
                     .div(255.0)
                     .expandDims(0);
 
@@ -111,8 +111,8 @@
                         const h = data[3 * numAnchors + i];
 
                         // 轉換回原始螢幕尺寸的座標
-                        const xScale = canvas.width / 640;
-                        const yScale = canvas.height / 640;
+                        const xScale = canvas.width / 320;
+                        const yScale = canvas.height / 320;
                         
                         const x = (cx - w / 2) * xScale;
                         const y = (cy - h / 2) * yScale;
@@ -134,8 +134,10 @@
                 }
             });
 
-            // 呼叫下一幀
-            requestAnimationFrame(detectFrame);
+            // 讓手機喘口氣，延遲 250 毫秒再算下一張
+            setTimeout(() => {
+             requestAnimationFrame(detectFrame);
+            }, 250);
         }
 
         async function main() {
