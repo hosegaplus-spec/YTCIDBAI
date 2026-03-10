@@ -1,0 +1,25 @@
+description: Ultralytics best model trained on C:\Users\Asia18\Desktop\臨時下載用\AIDB\concrete-8/data.yaml
+author: Ultralytics
+date: '2026-03-10T09:28:48.839115'
+version: 8.4.21
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: crack
+  1: hole
+  2: honeycombe
+  3: pitting
+  4: spalling
+args:
+  batch: 1
+  half: false
+  int8: false
+  nms: false
+channels: 3
+end2end: false
