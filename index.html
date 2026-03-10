@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HoSeGa WebAR 橋梁檢測系統</title>
+    <title>WebAR 橋梁檢測系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; }
@@ -18,7 +18,7 @@
 <body>
 
     <div id="uiContainer">
-        <h1>🌉 HoSeGa 即時快篩</h1>
+        <h1>🌉 即時快篩</h1>
         <p id="statusText">系統狀態：準備載入模型...</p>
         <p id="fps">FPS: --</p>
     </div>
@@ -34,6 +34,10 @@
         const fpsText = document.getElementById('fps');
         let model;
         let lastFrameTime = 0;
+
+        // 定義您的 5 種劣化名稱與對應的專業顏色
+        const classNames = ['裂縫 (crack)', '破洞 (hole)', '蜂窩 (honeycombe)', '點蝕 (pitting)', '剝落 (spalling)'];
+        const classColors = ['#FF3B30', '#FF9500', '#FFCC00', '#007AFF', '#AF52DE'];
 
         // 1. 啟動後置攝影機
         async function setupCamera() {
@@ -56,15 +60,30 @@
 
         // 2. 載入 YOLOv8 TFJS 模型
         async function loadModel() {
-            statusText.innerText = "系統狀態：載入 AI 大腦中 (需幾秒鐘)...";
+            statusText.innerText = "系統狀態：載入 AI 大腦中 (首次載入需幾秒鐘)...";
             try {
-                // 這裡會讀取同資料夾下的 model.json
+                // 指向您 GitHub Pages 上的 model.json
                 model = await tf.loadGraphModel('https://hosegaplus-spec.github.io/YTCIDBAI/model.json');
                 statusText.innerText = "✅ 模型載入完成！開始實時檢測。";
             } catch (error) {
-                statusText.innerText = "❌ 載入失敗！請確認檔案有一起上傳。";
+                statusText.innerText = "❌ 載入失敗！請確認檔案路徑與 CORS 設定。";
                 console.error(error);
             }
+        }
+
+        // --- IoU 計算函數 (NMS 過濾用) ---
+        function calculateIoU(box1, box2) {
+            const xA = Math.max(box1.x, box2.x);
+            const yA = Math.max(box1.y, box2.y);
+            const xB = Math.min(box1.x + box1.width, box2.x + box2.width);
+            const yB = Math.min(box1.y + box1.height, box2.y + box2.height);
+
+            const interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA);
+            const box1Area = box1.width * box1.height;
+            const box2Area = box2.width * box2.height;
+            const unionArea = box1Area + box2Area - interArea;
+
+            return interArea / unionArea;
         }
 
         // 3. 即時辨識迴圈 (核心引擎)
@@ -93,18 +112,29 @@
                 // 進行預測
                 const predictions = model.predict(tfImg);
                 
-                // YOLOv8 輸出格式解析 (簡化版：抓取信心度最高的結果)
-                // 注意：這是一個針對 MVP 測試的快速降維方法
+                // 解析 YOLOv8 輸出 [1, 9, 8400]
                 const data = predictions.dataSync();
-                const numClasses = 1; // 我們只有 defect 一個類別
-                const numAnchors = 8400; // YOLOv8 預設的網格數
+                const numClasses = 5; 
+                const numAnchors = 8400; 
 
-                // 尋找高於 25% 信心度的特徵
+                let rawBoxes = [];
+
+                // 第一階段：抓出所有超過信心度門檻的框
                 for (let i = 0; i < numAnchors; i++) {
-                    const confidence = data[4 * numAnchors + i]; // 取得信心度分數
+                    let maxConfidence = 0;
+                    let classIndex = -1;
                     
-                    if (confidence > 0.25) {
-                        // 取得邊界框中心點與長寬 (相對於 640x640)
+                    // 找出 5 個類別中最高分的
+                    for (let c = 0; c < numClasses; c++) {
+                        const confidence = data[(4 + c) * numAnchors + i];
+                        if (confidence > maxConfidence) {
+                            maxConfidence = confidence;
+                            classIndex = c;
+                        }
+                    }
+                    
+                    // 信心閥值設定為 25% (0.25)
+                    if (maxConfidence > 0.25) {
                         const cx = data[0 * numAnchors + i];
                         const cy = data[1 * numAnchors + i];
                         const w = data[2 * numAnchors + i];
@@ -114,30 +144,54 @@
                         const xScale = canvas.width / 640;
                         const yScale = canvas.height / 640;
                         
-                        const x = (cx - w / 2) * xScale;
-                        const y = (cy - h / 2) * yScale;
-                        const width = w * xScale;
-                        const height = h * yScale;
-
-                        // 畫出紅框
-                        ctx.strokeStyle = "#FF3B30"; // iOS 紅色
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(x, y, width, height);
-
-                        // 畫出標籤背景與文字
-                        ctx.fillStyle = "#FF3B30";
-                        ctx.fillRect(x, y - 25, 120, 25);
-                        ctx.fillStyle = "white";
-                        ctx.font = "16px Arial";
-                        ctx.fillText(`瑕疵 ${Math.round(confidence * 100)}%`, x + 5, y - 8);
+                        rawBoxes.push({
+                            x: (cx - w / 2) * xScale,
+                            y: (cy - h / 2) * yScale,
+                            width: w * xScale,
+                            height: h * yScale,
+                            confidence: maxConfidence,
+                            classIndex: classIndex
+                        });
                     }
                 }
+
+                // 第二階段：NMS (非極大值抑制) 過濾重疊框
+                // 將框依照信心度從高到低排序
+                rawBoxes.sort((a, b) => b.confidence - a.confidence);
+                const finalBoxes = [];
+                
+                while (rawBoxes.length > 0) {
+                    const bestBox = rawBoxes.shift(); // 取出最高分的框
+                    finalBoxes.push(bestBox);
+                    // 過濾掉與 bestBox 重疊率 (IoU) 超過 45% 的其他框
+                    rawBoxes = rawBoxes.filter(box => calculateIoU(bestBox, box) < 0.45);
+                }
+
+                // 第三階段：畫出最終過濾後的完美框線
+                finalBoxes.forEach(box => {
+                    const color = classColors[box.classIndex];
+                    const labelName = classNames[box.classIndex];
+
+                    // 畫外框
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(box.x, box.y, box.width, box.height);
+
+                    // 畫標籤底色
+                    ctx.fillStyle = color;
+                    ctx.fillRect(box.x, box.y - 25, 180, 25); 
+                    
+                    // 畫標籤文字與百分比
+                    ctx.fillStyle = "white";
+                    ctx.font = "bold 16px Arial";
+                    ctx.fillText(`${labelName} ${Math.round(box.confidence * 100)}%`, box.x + 5, box.y - 8);
+                });
             });
 
-            // 讓手機喘口氣，延遲 250 毫秒再算下一張
+            // 讓手機喘口氣，延遲 100 毫秒再算下一張 (可視手機效能調整)
             setTimeout(() => {
-             requestAnimationFrame(detectFrame);
-            }, 250);
+                requestAnimationFrame(detectFrame);
+            }, 100);
         }
 
         async function main() {
@@ -150,4 +204,3 @@
     </script>
 </body>
 </html>
-
