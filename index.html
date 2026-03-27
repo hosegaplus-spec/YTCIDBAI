@@ -126,15 +126,15 @@
                     
                     // 找出 5 個類別中最高分的
                     for (let c = 0; c < numClasses; c++) {
-                        const confidence = data[(4 + c) * numAnchors + i];
+                        const confidence = data[(2 + c) * numAnchors + i];
                         if (confidence > maxConfidence) {
                             maxConfidence = confidence;
                             classIndex = c;
                         }
                     }
                     
-                    // 信心閥值設定為 25% (0.25)
-                    if (maxConfidence > 0.25) {
+                    // 信心閥值設定為 20% (0.20)
+                    if (maxConfidence > 0.20) {
                         const cx = data[0 * numAnchors + i];
                         const cy = data[1 * numAnchors + i];
                         const w = data[2 * numAnchors + i];
@@ -188,7 +188,7 @@
                 });
             });
 
-            // 讓手機喘口氣，延遲 100 毫秒再算下一張 (可視手機效能調整)
+            // 讓手機喘口氣，延遲 300 毫秒再算下一張 (可視手機效能調整)
             setTimeout(() => {
                 requestAnimationFrame(detectFrame);
             }, 100);
