@@ -126,7 +126,7 @@
                     
                     // 找出 5 個類別中最高分的
                     for (let c = 0; c < numClasses; c++) {
-                        const confidence = data[(2 + c) * numAnchors + i];
+                        const confidence = data[(4 + c) * numAnchors + i];
                         if (confidence > maxConfidence) {
                             maxConfidence = confidence;
                             classIndex = c;
@@ -191,7 +191,7 @@
             // 讓手機喘口氣，延遲 300 毫秒再算下一張 (可視手機效能調整)
             setTimeout(() => {
                 requestAnimationFrame(detectFrame);
-            }, 100);
+            }, 300);
         }
 
         async function main() {
