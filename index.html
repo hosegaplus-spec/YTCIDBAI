@@ -35,9 +35,9 @@
         let model;
         let lastFrameTime = 0;
 
-        // 定義您的 5 種劣化名稱與對應的專業顏色
-        const classNames = ['裂縫 (crack)', '破洞 (hole)', '蜂窩 (honeycombe)', '點蝕 (pitting)', '剝落 (spalling)'];
-        const classColors = ['#FF3B30', '#FF9500', '#FFCC00', '#007AFF', '#AF52DE'];
+        // 定義您的 3 種劣化名稱與對應的專業顏色
+        const classNames = ['鋼筋暴露 (RB)', '混凝土剝落 (RC)', '裂縫 (crack)'];
+        const classColors = ['#FF9500', '#AF52DE', '#FF3B30'];
 
         // 1. 啟動後置攝影機
         async function setupCamera() {
@@ -60,7 +60,7 @@
 
         // 2. 載入 YOLOv8 TFJS 模型
         async function loadModel() {
-            statusText.innerText = "系統狀態：載入 AI 大腦中 (首次載入需幾秒鐘)...";
+            statusText.innerText = "系統狀態：載入 AI 中 (首次載入需幾秒鐘)...";
             try {
                 // 指向您 GitHub Pages 上的 model.json
                 model = await tf.loadGraphModel('https://hosegaplus-spec.github.io/YTCIDBAI/model.json');
@@ -114,7 +114,7 @@
                 
                 // 解析 YOLOv8 輸出 [1, 9, 8400]
                 const data = predictions.dataSync();
-                const numClasses = 5; 
+                const numClasses = 3; 
                 const numAnchors = 8400; 
 
                 let rawBoxes = [];
