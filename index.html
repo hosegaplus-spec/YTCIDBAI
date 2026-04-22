@@ -21,6 +21,13 @@
         <h1>🌉 即時快篩</h1>
         <p id="statusText">系統狀態：準備載入模型...</p>
         <p id="fps">FPS: --</p>
+        <div style="margin-top:8px">
+            <label for="zoomRange">縮放: </label>
+            <input id="zoomRange" type="range" min="1" max="1" step="0.1" value="1" style="vertical-align:middle">
+            <button id="zoomOut">-</button>
+            <button id="zoomIn">+</button>
+            <span id="zoomValue">1x</span>
+        </div>
     </div>
 
     <video id="videoElement" autoplay playsinline muted></video>
@@ -47,6 +54,15 @@
                     video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } }
                 });
                 video.srcObject = stream;
+                // 取得 video track 以便支援硬體縮放
+                try {
+                    const [track] = stream.getVideoTracks();
+                    window._cameraTrack = track;
+                    const caps = track.getCapabilities ? track.getCapabilities() : {};
+                    window._cameraCapabilities = caps;
+                } catch(e) {
+                    console.warn('無法讀取 video track capabilities', e);
+                }
                 return new Promise((resolve) => {
                     video.onloadedmetadata = () => {
                         video.play();
@@ -197,7 +213,83 @@
         async function main() {
             await setupCamera();
             await loadModel();
+            setupZoomControls();
             detectFrame();
+        }
+
+        // 初始化縮放 UI 與事件
+        function setupZoomControls(){
+            const zoomRange = document.getElementById('zoomRange');
+            const zoomValue = document.getElementById('zoomValue');
+            const zoomInBtn = document.getElementById('zoomIn');
+            const zoomOutBtn = document.getElementById('zoomOut');
+
+            let minZ = 1, maxZ = 1, stepZ = 0.1;
+            if (window._cameraCapabilities && window._cameraCapabilities.zoom) {
+                minZ = window._cameraCapabilities.zoom.min || 1;
+                maxZ = window._cameraCapabilities.zoom.max || 1;
+                stepZ = window._cameraCapabilities.zoom.step || 0.1;
+                zoomRange.min = minZ;
+                zoomRange.max = maxZ;
+                zoomRange.step = stepZ;
+                // 嘗試取得目前 zoom
+                try {
+                    const settings = window._cameraTrack.getSettings();
+                    const cur = settings.zoom || minZ;
+                    zoomRange.value = cur;
+                    zoomValue.innerText = `${parseFloat(cur).toFixed(2)}x`;
+                } catch(e){ zoomRange.value = minZ; }
+            } else {
+                // fallback: 顯示滑桿但僅控制 CSS scale
+                zoomRange.min = 1;
+                zoomRange.max = 3;
+                zoomRange.step = 0.05;
+                zoomRange.value = 1;
+                zoomValue.innerText = '1x (軟體)';
+            }
+
+            async function applyZoom(v){
+                zoomValue.innerText = `${parseFloat(v).toFixed(2)}x`;
+                if (window._cameraTrack && window._cameraCapabilities && window._cameraCapabilities.zoom) {
+                    try {
+                        await window._cameraTrack.applyConstraints({ advanced: [{ zoom: parseFloat(v) }] });
+                    } catch(e){ console.warn('applyConstraints zoom failed', e); }
+                } else {
+                    // fallback: CSS transform 放大顯示（不是真正相機 zoom）
+                    video.style.transform = `scale(${v})`;
+                    video.style.transformOrigin = 'center center';
+                }
+            }
+
+            zoomRange.addEventListener('input', (e)=>{ applyZoom(e.target.value); });
+            zoomInBtn.addEventListener('click', ()=>{ zoomRange.value = Math.min(parseFloat(zoomRange.value) + parseFloat(zoomRange.step), parseFloat(zoomRange.max)); applyZoom(zoomRange.value); });
+            zoomOutBtn.addEventListener('click', ()=>{ zoomRange.value = Math.max(parseFloat(zoomRange.value) - parseFloat(zoomRange.step), parseFloat(zoomRange.min)); applyZoom(zoomRange.value); });
+
+            // 支援捏合手勢 (touchpinch)
+            let lastDistance = null;
+            let initialZoom = parseFloat(zoomRange.value || 1);
+            function getDistance(touches){
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.hypot(dx, dy);
+            }
+            video.addEventListener('touchstart', (e)=>{
+                if (e.touches.length === 2){
+                    lastDistance = getDistance(e.touches);
+                    initialZoom = parseFloat(zoomRange.value) || 1;
+                }
+            }, { passive: true });
+            video.addEventListener('touchmove', (e)=>{
+                if (e.touches.length === 2 && lastDistance){
+                    const d = getDistance(e.touches);
+                    const ratio = d / lastDistance;
+                    let newZoom = initialZoom * ratio;
+                    newZoom = Math.max(parseFloat(zoomRange.min), Math.min(parseFloat(zoomRange.max), newZoom));
+                    zoomRange.value = newZoom;
+                    applyZoom(newZoom);
+                }
+            }, { passive: true });
+            video.addEventListener('touchend', (e)=>{ if (e.touches.length < 2) { lastDistance = null; } }, { passive: true });
         }
 
         main();
